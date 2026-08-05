@@ -55,7 +55,7 @@ def bresenham(x1, y1, x2, y2):
 
 # -- Frontier Handlers --
 #Gets Edges of Unknown Areas
-def get_frontier_contours(robot_map):
+def get_frontier_points(robot_map, search_area):
     frontier_map = np.ones(np.shape(robot_map), dtype=np.uint8) * 255
 
     edge_map = cv2.bitwise_not(cv2.threshold(robot_map, UNKNOWN+1, 255, cv2.THRESH_BINARY)[1]) #map of edges of known area
@@ -76,16 +76,64 @@ def get_frontier_contours(robot_map):
     #Displays frontier on robot map in red
     test_map = robot_map.copy()
     test_map = np.stack((test_map,) * 3, axis=-1)
-    frontier_contours = cv2.findContours(frontier_map, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)[0]
     test_map = cv2.drawContours(test_map, frontier_contours, -1, [0,0,255],1)
 
     cv2.imshow("frontiers", test_map)
     cv2.waitKey(10)
     '''
 
-    return frontier_contours
+    f_points = []
+    #Get frontier point candidates to evaluate from centroids of contours
+    for f_contour in frontier_contours:
+        #print(f_contour) #Array of 2D arrays [[x y]] 
+        if np.shape(f_contour)[0]/(search_area) > 1:
+            num_sections = np.round(np.shape(f_contour)[0] / (search_area))
+            sections = np.array_split(f_contour, num_sections)
+        else:
+            sections = f_contour
+        #print(sections)
+        for section in sections:
+            length = np.shape(section)[0]
+            x = np.empty(length)
+            y = np.empty(length)
+            i = 0
+            for point in section:
+                point = point.squeeze()
+
+                x[i] = point[1]
+                y[i] = point[0]
+                i = i+1
+            sum_x = np.sum(x)
+            sum_y = np.sum(y)
+            f_points.append((np.round(sum_x/length).astype(np.uint8),np.round(sum_y/length).astype(np.uint8)))
+    print(f_points)
+
+    test_map = robot_map.copy()
+    test_map = np.stack((test_map,) * 3, axis=-1)
+    for point in f_points:
+        test_map = cv2.circle(test_map, (point[1], point[0]), 3, [0,0,255], -1)
+    cv2.imshow("points", test_map)
+    cv2.waitKey(10)    
 
 
+    return f_points
+
+def evaluate_frontier_points(points, robot_pose, robot_map):
+    return
+
+#get_frontier_points():
+#Break up frontiers into reasonable segments
+#Determine centroids of segments
+
+#evaluate_frontier_points():
+#For each centroid point evaluate:
+#   Distance From Robot
+#   Area to be uncovered
+#   Distance of hazard needed to be pathed through
+#From that pick best centroid
+
+#main():
+#Move robot to that centroid
 
 # -- Main --
 def main():
@@ -130,9 +178,9 @@ def main():
 
         robot_pos[0] = robot_pos[0] - 1
         robot_map = reveal_grid(robot_map, Map, robot_pos, search_radius)
-        get_frontier_contours(robot_map)
+        get_frontier_points(robot_map, search_radius)
         cv2.imshow("Map", robot_map)
-        cv2.waitKey(1)
+        cv2.waitKey(100)
 
     
           
