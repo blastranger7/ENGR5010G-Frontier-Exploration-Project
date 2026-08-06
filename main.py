@@ -82,14 +82,7 @@ def get_frontier_points(robot_map, search_area):
     #Displays frontier on robot map in red
     test_map = robot_map.copy()
     test_map = np.stack((test_map,) * 3, axis=-1)
-    test_map = cv2.drawContours(test_map, frontier_contours, -1, [0,0,255],1)
-
-
-    cv2.imshow("walls", wall_map)
-    cv2.waitKey(10)
-    cv2.imshow("frontiers", test_map)
-    cv2.waitKey(10)
-  
+    test_map = cv2.drawContours(test_map, frontier_contours, -1, [0,255,0],1)
 
     f_points = []
     #Get frontier point candidates to evaluate from centroids of contours
@@ -118,15 +111,16 @@ def get_frontier_points(robot_map, search_area):
             f_points.append(np.asanyarray([np.round(sum_x/length), np.round(sum_y/length)]).astype(np.int32))
     #print(f_points)
 
+
     test_map = robot_map.copy()
     test_map = np.stack((test_map,) * 3, axis=-1)
+    test_map = cv2.drawContours(test_map, frontier_contours, -1, [0,0,255],1)
     for point in f_points:
-        test_map = cv2.circle(test_map, (point[1], point[0]), 3, [0,0,255], -1)
-    cv2.imshow("points", test_map)
-    cv2.waitKey(10)    
+        test_map = cv2.circle(test_map, (point[1], point[0]), 3, [0,255,0], -1)
+       
 
     #f_points = np.unique(f_points)
-    return f_points
+    return f_points, test_map
 
 def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
     
@@ -205,23 +199,31 @@ def main():
     # -- Robot Construction --
     robot_map = np.ones(np.shape(Map), dtype=np.uint8) * UNKNOWN
     start_pos = [249, 125]
-    robot_pos = start_pos
+    robot_pos = [start_pos]
 
-    robot_map = reveal_grid(robot_map, Map, robot_pos, search_radius)
+    robot_map = reveal_grid(robot_map, Map, robot_pos[-1], search_radius)
     while True:
 
         # evaluate frontiers and select one
         #go to frontier
         #robot_pos[0] = robot_pos[0] - 1
-        points = get_frontier_points(robot_map, search_radius)
+        points, test_map = get_frontier_points(robot_map, search_radius)
         if len(points) == 0:
             break
-        best_frontier = evaluate_frontier_points(points, robot_pos, robot_map, search_radius)
-        robot_pos = best_frontier
-        robot_map = reveal_grid(robot_map, Map, robot_pos, search_radius)
+        best_frontier = evaluate_frontier_points(points, robot_pos[-1], robot_map, search_radius)
+        robot_pos.append(best_frontier)
+        robot_map = reveal_grid(robot_map, Map, robot_pos[-1], search_radius)
         get_frontier_points(robot_map, search_radius)
-        cv2.imshow("Map", robot_map)
-        cv2.waitKey(100)
+
+
+
+
+        #Map Display
+        for point in robot_pos:
+            test_map = cv2.circle(test_map, (point[1], point[0]), 3, [255,0,0], -1)
+
+        cv2.imshow("points", test_map)
+        cv2.waitKey(100) 
 
     
           
