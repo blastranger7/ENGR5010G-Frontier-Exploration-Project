@@ -17,9 +17,9 @@ def reveal_grid(robot_map, map, pose, search_area):
     reveal_area = np.zeros(map.shape, np.uint8)
 
     reveal_area = cv2.circle(reveal_area, (pose[1], pose[0]), search_area, 255, -1)
-    contours = np.argwhere(reveal_area==255) #cv2.findContours(reveal_area, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)[0]
+    contours = np.argwhere(reveal_area==255)
     reveal_area = cv2.bitwise_and(map, reveal_area) #maybe unnecessary
-    #Iterate drawing a line outwards to each circumference pixel
+    #Iterate drawing a line outwards to eachpixel in the area
     #For each line pixel, check if it's black, if it is every pixel after it us unknown
     for circ_point in contours:
         line = bresenham(pose[0], pose[1], circ_point[0], circ_point[1])
@@ -94,7 +94,6 @@ def get_frontier_points(robot_map, search_area):
             sections = np.array_split(f_contour, num_sections)
         else:
             sections = f_contour
-        #print(sections)
         for section in sections:
             length = np.shape(section)[0]
             x = np.empty(length)
@@ -132,21 +131,24 @@ def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
     area_total = np.count_nonzero(reveal_area)
 
     for point in points:
+        #Euclidian Distance
         d = math.sqrt((point[0] - robot_pose[0])**2 + (point[1] - robot_pose[1])**2 )
 
         #New Info Calc
         reveal_area = cv2.circle(reveal_area, (point[1], point[0]), search_area, 255, -1)
         reveal_area = cv2.bitwise_and(robot_map, reveal_area)
         area_unknown = np.sum(reveal_area==UNKNOWN)
-        path = bresenham(robot_pose[0], point[0], robot_pose[1], point[1])
-        if area_unknown > best:
-            best_pos=point
 
         #Hazard Calc
+        path = bresenham(robot_pose[0], point[0], robot_pose[1], point[1]) #needs a better method - not guarenteed to be a straight line 
         hazards = 0
         for pos in path:
             if robot_map[pos] == HAZARD:
                 hazards = hazards + 1
+
+        val = d*(1+ area_unknown/area_total)#Temporary Desicion algorithm for testing
+        if val > best:
+            best_pos=point
 
         
 
