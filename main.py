@@ -5,7 +5,7 @@ import cv2
 import scipy
 import time
 import math
-#import a_star
+import a_star
 
 UNKNOWN = 128
 HAZARD = 191
@@ -93,7 +93,6 @@ def get_frontier_points(robot_map, search_area):
         if np.round(np.shape(f_contour)[0]/(search_area)) > 1:
             num_sections = np.round(np.shape(f_contour)[0] / (search_area))
             sections = np.array_split(f_contour, num_sections)
-            print(len(sections))
         else:
             sections = f_contour
         for section in sections:
@@ -125,8 +124,8 @@ def get_frontier_points(robot_map, search_area):
 
 def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
     #gains
-    ak = 0.8
-    dk = 0.8
+    ak = 0.5
+    dk = 1
     hk = 1
 
     best = 1000000000000000000000
@@ -137,7 +136,25 @@ def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
 
     for point in points:
         #Euclidian Distance
-        d = math.sqrt((point[0] - robot_pose[0])**2 + (point[1] - robot_pose[1])**2 )
+        line = bresenham(robot_pose[0], point[0], robot_pose[1], point[1])
+        if check_euclidian(line, robot_map) == True:
+            path = line
+            d = math.sqrt((point[0] - robot_pose[0])**2 + (point[1] - robot_pose[1])**2 )
+        else:
+            a_planner = a_star.PathPlanner(
+                grid=list(1 + (-1 * robot_map.astype(float) / 255)), visual=False
+            )
+            path = a_planner.a_star(robot_pose, point)
+            if path == -1:
+                d = 100000000000
+            else:
+                d = np.sum(
+                    [
+                        np.linalg.norm(np.array(y) - np.array(x))
+                        for x, y in zip(path, path[1:])
+                    ]
+                )
+
 
         #New Info Calc
         reveal_area = cv2.circle(reveal_area, (point[1], point[0]), search_area, 255, -1)
@@ -145,22 +162,22 @@ def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
         area_unknown = np.sum(reveal_area==UNKNOWN)
 
         #Hazard Calc
-        path = bresenham(robot_pose[0], point[0], robot_pose[1], point[1]) #needs a better method - not guarenteed to be a straight line 
+        #path = bresenham(robot_pose[0], point[0], robot_pose[1], point[1]) #needs a better method - not guarenteed to be a straight line 
         hazards = 0
-        for pos in path:
-            if robot_map[pos] == HAZARD:
-                hazards = hazards + 1
+        if path != -1:
+            for pos in path:
+                if robot_map[pos[0], pos[1]] == HAZARD:
+                    hazards = hazards + 1
 
-        val = dk*d + dk*hazards - ak*(1 + area_unknown/area_total) #Temporary Desicion algorithm for testing
+        val = dk*d + dk*hazards #- ak*(1 + area_unknown/area_total) #Temporary Desicion algorithm for testing
         if val < best:
             best = val
             best_pos=point
 
-        
-    print(best_pos)
-    return best_pos
+    return best_pos, path
 
 def adjust_frontier(pose, map):
+    print(pose)
     if map[pose[0], pose[1]] == 0:
         if map[pose[0]-1, pose[1]] == 255:
             pose = (pose[0]-1, pose[1])
@@ -172,11 +189,17 @@ def adjust_frontier(pose, map):
                 pose = (pose[0], pose[1]+1)
     return pose
 
+def check_euclidian(points, robot_map):
+    for point in points:
+        if robot_map[point] == 0:
+            return False
+    return True
+
 # -- Main --
 def main():
 
     # -- Map Construction --
-    Maps = [r"Maps/hall.png", r"Maps/house.png", r"Maps/house2.png"]
+    Maps = [r"Maps/hall.png", r"Maps/house.png", r"Maps/house_haz.png", r"Maps/Hall_haz.png"]
     Map = cv2.imread(Maps[0])
     Map_display = Map.copy() #Map Copy for display purposes
     Map = cv2.cvtColor(Map, cv2.COLOR_RGB2GRAY) #Map in grayscale for processing
@@ -205,6 +228,7 @@ def main():
     # -- Robot Construction --
     robot_map = np.ones(np.shape(Map), dtype=np.uint8) * UNKNOWN
     start_pos = [249, 125]
+    #start_pos = [249, 70]
     robot_pos = [start_pos]
 
     #robot_map = reveal_grid(robot_map, Map, robot_pos[-1], search_radius)
@@ -216,7 +240,7 @@ def main():
         points, test_map = get_frontier_points(robot_map, search_radius)
         if len(points) == 0:
             break
-        best_frontier = evaluate_frontier_points(points, robot_pos[-1], robot_map, search_radius)
+        best_frontier, path = evaluate_frontier_points(points, robot_pos[-1], robot_map, search_radius)
         
         #Map Display
         for point in robot_pos:
@@ -227,6 +251,7 @@ def main():
 
         #Avoids getting stuck in a wall - robot would usually avoid collision
         best_frontier = adjust_frontier(best_frontier, Map)
+
         robot_pos.append(best_frontier)
 
 
