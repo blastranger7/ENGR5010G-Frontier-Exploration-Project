@@ -93,6 +93,7 @@ def get_frontier_points(robot_map, search_area):
         if np.round(np.shape(f_contour)[0]/(search_area)) > 1:
             num_sections = np.round(np.shape(f_contour)[0] / (search_area))
             sections = np.array_split(f_contour, num_sections)
+            print(len(sections))
         else:
             sections = f_contour
         for section in sections:
@@ -125,7 +126,7 @@ def get_frontier_points(robot_map, search_area):
 def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
     #gains
     ak = 0.8
-    dk = 1
+    dk = 0.8
     hk = 1
 
     best = 1000000000000000000000
@@ -159,19 +160,17 @@ def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
     print(best_pos)
     return best_pos
 
-#get_frontier_points():
-#Break up frontiers into reasonable segments
-#Determine centroids of segments
-
-#evaluate_frontier_points():
-#For each centroid point evaluate:
-#   Distance From Robot
-#   Area to be uncovered
-#   Distance of hazard needed to be pathed through
-#From that pick best centroid
-
-#main():
-#Move robot to that centroid
+def adjust_frontier(pose, map):
+    if map[pose[0], pose[1]] == 0:
+        if map[pose[0]-1, pose[1]] == 255:
+            pose = (pose[0]-1, pose[1])
+        elif map[pose[0]+1, pose[1]] == 255:
+                pose = (pose[0]+1, pose[1])
+        elif map[pose[0], pose[1]-1] == 255:
+                pose = (pose[0], pose[1]-1)
+        elif map[pose[0], pose[1]+1] == 255:
+                pose = (pose[0], pose[1]+1)
+    return pose
 
 # -- Main --
 def main():
@@ -182,7 +181,7 @@ def main():
     Map_display = Map.copy() #Map Copy for display purposes
     Map = cv2.cvtColor(Map, cv2.COLOR_RGB2GRAY) #Map in grayscale for processing
 
-    search_radius = 15
+    search_radius = 20
 
     # pad image with zeros to avoid index out of bounds error when searching for frontier points
     full_image = np.zeros(
@@ -219,11 +218,6 @@ def main():
             break
         best_frontier = evaluate_frontier_points(points, robot_pos[-1], robot_map, search_radius)
         
-        
-
-
-
-
         #Map Display
         for point in robot_pos:
             test_map = cv2.circle(test_map, (point[1], point[0]), 3, [255,0,0], -1)
@@ -231,7 +225,12 @@ def main():
         cv2.imshow("points", test_map)
         cv2.waitKey(100) 
 
+        #Avoids getting stuck in a wall - robot would usually avoid collision
+        best_frontier = adjust_frontier(best_frontier, Map)
         robot_pos.append(best_frontier)
+
+
+
     print(f"Exploration finished with {len(robot_pos)} movements")
 
 if __name__ == "__main__":
