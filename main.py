@@ -5,6 +5,7 @@ import cv2
 import scipy
 import time
 import math
+#import a_star
 
 UNKNOWN = 128
 HAZARD = 191
