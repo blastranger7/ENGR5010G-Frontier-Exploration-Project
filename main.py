@@ -122,7 +122,7 @@ def get_frontier_points(robot_map, search_area):
     #f_points = np.unique(f_points)
     return f_points, test_map
 
-def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
+def evaluate_frontier_points(points, robot_pose, robot_map, Map, search_area):
     #gains
     ak = 0.5
     dk = 1
@@ -136,15 +136,16 @@ def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
 
     for point in points:
         #Euclidian Distance
+        point = adjust_frontier(point, Map)
         line = bresenham(robot_pose[0], point[0], robot_pose[1], point[1])
         if check_euclidian(line, robot_map) == True:
             path = line
             d = math.sqrt((point[0] - robot_pose[0])**2 + (point[1] - robot_pose[1])**2 )
         else:
             a_planner = a_star.PathPlanner(
-                grid=list(1 + (-1 * robot_map.astype(float) / 255)), visual=False
+                grid=list(1 + (-1 * cv2.threshold(robot_map, UNKNOWN-1, 255, cv2.THRESH_BINARY)[1].astype(float) / 255)), visual=False
             )
-            path = a_planner.a_star(robot_pose, point)
+            path = a_planner.a_star(robot_pose[::-1], point[::-1])
             if path == -1:
                 d = 100000000000
             else:
@@ -174,10 +175,9 @@ def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
             best = val
             best_pos=point
 
-    return best_pos, path
+    return best_pos, path, d
 
 def adjust_frontier(pose, map):
-    print(pose)
     if map[pose[0], pose[1]] == 0:
         if map[pose[0]-1, pose[1]] == 255:
             pose = (pose[0]-1, pose[1])
@@ -198,6 +198,7 @@ def check_euclidian(points, robot_map):
 # -- Main --
 def main():
 
+    total_dist = 0
     # -- Map Construction --
     Maps = [r"Maps/hall.png", r"Maps/house.png", r"Maps/house_haz.png", r"Maps/Hall_haz.png"]
     Map = cv2.imread(Maps[0])
@@ -240,8 +241,8 @@ def main():
         points, test_map = get_frontier_points(robot_map, search_radius)
         if len(points) == 0:
             break
-        best_frontier, path = evaluate_frontier_points(points, robot_pos[-1], robot_map, search_radius)
-        
+        best_frontier, path, dist = evaluate_frontier_points(points, robot_pos[-1], robot_map, Map, search_radius)
+        total_dist = total_dist + dist
         #Map Display
         for point in robot_pos:
             test_map = cv2.circle(test_map, (point[1], point[0]), 3, [255,0,0], -1)
@@ -256,7 +257,7 @@ def main():
 
 
 
-    print(f"Exploration finished with {len(robot_pos)} movements")
+    print(f"Exploration finished with {len(robot_pos)} movements and a total distance of {total_dist:.2f}")
 
 if __name__ == "__main__":
     main()
