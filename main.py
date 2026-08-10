@@ -123,9 +123,12 @@ def get_frontier_points(robot_map, search_area):
     return f_points, test_map
 
 def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
-    
+    #gains
+    ak = 0.8
+    dk = 1
+    hk = 1
 
-    best = 0
+    best = 1000000000000000000000
     best_pos = points[0]
     reveal_area = np.zeros(robot_map.shape, np.uint8)
     reveal_area = cv2.circle(reveal_area, (robot_pose[1], robot_pose[0]), search_area, 255, -1)
@@ -147,12 +150,13 @@ def evaluate_frontier_points(points, robot_pose, robot_map, search_area):
             if robot_map[pos] == HAZARD:
                 hazards = hazards + 1
 
-        val = d*(1+ area_unknown/area_total)#Temporary Desicion algorithm for testing
-        if val > best:
+        val = dk*d + dk*hazards - ak*(1 + area_unknown/area_total) #Temporary Desicion algorithm for testing
+        if val < best:
+            best = val
             best_pos=point
 
         
-
+    print(best_pos)
     return best_pos
 
 #get_frontier_points():
@@ -204,9 +208,9 @@ def main():
     start_pos = [249, 125]
     robot_pos = [start_pos]
 
-    robot_map = reveal_grid(robot_map, Map, robot_pos[-1], search_radius)
+    #robot_map = reveal_grid(robot_map, Map, robot_pos[-1], search_radius)
     while True:
-
+        robot_map = reveal_grid(robot_map, Map, robot_pos[-1], search_radius)
         # evaluate frontiers and select one
         #go to frontier
         #robot_pos[0] = robot_pos[0] - 1
@@ -214,9 +218,8 @@ def main():
         if len(points) == 0:
             break
         best_frontier = evaluate_frontier_points(points, robot_pos[-1], robot_map, search_radius)
-        robot_pos.append(best_frontier)
-        robot_map = reveal_grid(robot_map, Map, robot_pos[-1], search_radius)
-        get_frontier_points(robot_map, search_radius)
+        
+        
 
 
 
@@ -228,8 +231,8 @@ def main():
         cv2.imshow("points", test_map)
         cv2.waitKey(100) 
 
-    
-          
+        robot_pos.append(best_frontier)
+    print(f"Exploration finished with {len(robot_pos)} movements")
 
 if __name__ == "__main__":
     main()
