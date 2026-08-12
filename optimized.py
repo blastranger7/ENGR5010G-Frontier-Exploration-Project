@@ -78,133 +78,100 @@ def get_frontier_points(robot_map, search_area):
     frontier_map[np.shape(frontier_map)[0]-1, :] = 0
     frontier_map[:, np.shape(frontier_map)[1]-1] = 0
 
-    frontier_contours = cv2.findContours(frontier_map, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)[0] #may need to be cv2.bitwise_not()
-    
-    
-    frontier_contours = [cnt for cnt in frontier_contours if len(cnt) >= 5]
+    #frontier_contours = cv2.findContours(frontier_map, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)[0] #may need to be cv2.bitwise_not()
+    frontier_contours= np.argwhere(frontier_map==255)
+    #frontier_contours = [cnt for cnt in frontier_contours if len(cnt) >= 5]
     
     #Displays frontier on robot map in red
     test_map = robot_map.copy()
     test_map = np.stack((test_map,) * 3, axis=-1)
-    test_map = cv2.drawContours(test_map, frontier_contours, -1, [0,255,0],1)
-
-    f_points = []
-    #Get frontier point candidates to evaluate from centroids of contours
-    for f_contour in frontier_contours:
-        f_contour = np.squeeze(f_contour)
-        con_len = np.shape(f_contour)[0]
-        num_sections = con_len//search_area//2
-        if num_sections >= 1:
-            sections = np.array_split(f_contour, num_sections)
-            for section in sections:
-                midpoint = section.shape[0]//2
-                f_points.append([int(section[midpoint,1]),int(section[midpoint,0])])
-        else:
-            section = f_contour
-            midpoint = section.shape[0]//2
-            f_points.append([int(section[midpoint,1]),int(section[midpoint,0])])
-       
-
-    '''
-    for f_contour in frontier_contours:
-        
-        #print(f_contour) #Array of 2D arrays [[x y]] 
-        if np.round(np.shape(f_contour)[0]/(search_area))/2 > 1:
-            num_sections = np.round(np.shape(f_contour)[0] / (search_area))/2
-            print(num_sections)
-            sections = np.array_split(f_contour, num_sections)
-        else:
-            sections = f_contour
-        for section in sections:
-            
-            length = np.shape(section)[0]
-            x = np.empty(length)
-            y = np.empty(length)
-            i = 0
-            for point in section:
-                point = point.squeeze()
-
-                x[i] = point[1]
-                y[i] = point[0]
-                i = i+1
-            sum_x = np.sum(x)
-            sum_y = np.sum(y)
-            f_points.append(np.asanyarray([np.round(sum_x/length), np.round(sum_y/length)]).astype(np.int32))
-            
-            print(section)
-            f_points.append(section[section.size()//2])
-    '''
-    #print(f_points)
-
-
-    test_map = robot_map.copy()
-    test_map = np.stack((test_map,) * 3, axis=-1)
-    test_map = cv2.drawContours(test_map, frontier_contours, -1, [0,0,255],1)
-    for point in f_points:
-        test_map = cv2.circle(test_map, (point[1], point[0]), 2, [0,0,255], -1)
-       
-
+    for point in frontier_contours:
+         test_map[point[0], point[1]] = [0,0,255]
+    #test_map = cv2.drawContours(test_map, frontier_contours, -1, [0,0,255],1)
+    
     #f_points = np.unique(f_points)
-    return f_points, test_map
+    return frontier_contours, test_map
 
-def evaluate_frontier_points(points, robot_pose, robot_map, Map, search_area):
+def frontier_cost(x, f_points, r_point, robot_map, search_area):
     #gains
     ak = 0.3
     dk = 1
     hk = 1
+    #(f_points, r_point, robot_map, search_area) = args
+    f_point = f_points[int(x[0])]
 
-    best = 1000000000000000000000
-    reveal_area = np.zeros(robot_map.shape, np.uint8)
-    #reveal_area = cv2.circle(reveal_area, (robot_pose[1], robot_pose[0]), search_area, 255, -1)
-    #area_total = np.count_nonzero(reveal_area)
+    f_point = adjust_frontier(f_point, cv2.threshold(robot_map, UNKNOWN+1, 255, cv2.THRESH_BINARY)[1])
+   
 
+    line = bresenham(r_point[0], r_point[1], f_point[0], f_point[1])
     
-    for point in points:
-        #Euclidian Distance
-        point = adjust_frontier(point, cv2.threshold(robot_map, UNKNOWN+1, 255, cv2.THRESH_BINARY)[1])
-        line = bresenham(robot_pose[0], robot_pose[1], point[0], point[1])
-        if check_euclidian(line, cv2.threshold(robot_map, UNKNOWN+1, 255, cv2.THRESH_BINARY)[1]) == True:
-            path = line
-            d = math.sqrt((point[0] - robot_pose[0])**2 + (point[1] - robot_pose[1])**2 )
+    if check_euclidian(line, robot_map) == True:
+        
+        path = line
+        d = math.sqrt((f_point[0] - r_point[0])**2 + (f_point[1] - r_point[1])**2 )
+    else:
+        a_planner = a_star.PathPlanner(
+            grid=list(1 + (-1 * cv2.threshold(robot_map, UNKNOWN+1, 255, cv2.THRESH_BINARY)[1].astype(float) / 255)), visual=False
+        )
+        path = a_planner.a_star(r_point[::-1], f_point[::-1])
+        
+        if path == -1:
+            d = 1000000000000000000000
         else:
-            a_planner = a_star.PathPlanner(
-                grid=list(1 + (-1 * cv2.threshold(robot_map, UNKNOWN+1, 255, cv2.THRESH_BINARY)[1].astype(float) / 255)), visual=False
+            path = [point[::-1] for point in path]
+            d = np.sum(
+                [
+                    np.linalg.norm(np.array(y) - np.array(x))
+                    for x, y in zip(path, path[1:])
+                ]
             )
-            path = a_planner.a_star(robot_pose[::-1], point[::-1])
-            
-            if path == -1:
-                d = 1000000000000000000000
-            else:
-                path = [point[::-1] for point in path]
-                d = np.sum(
+    reveal_area = np.zeros(robot_map.shape, np.uint8)
+    reveal_area = cv2.circle(reveal_area, (f_point[1], f_point[0]), search_area, 255, -1)
+    reveal_area = cv2.bitwise_and(robot_map, reveal_area)
+    area_unknown = np.sum(reveal_area==UNKNOWN)
+
+    hazards = 0
+    if path != -1:
+        for pos in path:
+            if robot_map[pos[0], pos[1]] == HAZARD:
+                        hazards = hazards + 1
+
+    val = dk*d + hk*hazards - ak*area_unknown
+    #print(val)
+    return val
+
+def eval_frontier(points, robot_pos, robot_map, search_radius):
+    length = np.shape(points)[0]
+    best_index = scipy.optimize.differential_evolution(
+        func=frontier_cost,
+        bounds=[(0, length-1)], 
+        args=(points, robot_pos, robot_map, search_radius), 
+        popsize=min(length//10, 20), 
+        maxiter = 5,
+        integrality=True
+    )
+
+    best_frontier = points[int(best_index.x[0])]
+    best_frontier = adjust_frontier(best_frontier, cv2.threshold(robot_map, UNKNOWN+1, 255, cv2.THRESH_BINARY)[1])
+
+    line = bresenham(robot_pos[0], robot_pos[1], best_frontier[0], best_frontier[1])
+    if check_euclidian(line, robot_map) == True:
+            path = line
+    else:
+        a_planner = a_star.PathPlanner(
+            grid=list(1 + (-1 * cv2.threshold(robot_map, UNKNOWN+1, 255, cv2.THRESH_BINARY)[1].astype(float) / 255)), visual=False
+        )
+        path = a_planner.a_star(robot_pos[::-1], best_frontier[::-1])
+        path = [point[::-1] for point in path]
+    d = np.sum(
                     [
                         np.linalg.norm(np.array(y) - np.array(x))
                         for x, y in zip(path, path[1:])
                     ]
                 )
-
-
-        #New Info Calc
-        reveal_area = cv2.circle(reveal_area, (point[1], point[0]), search_area, 255, -1)
-        reveal_area = cv2.bitwise_and(robot_map, reveal_area)
-        area_unknown = np.sum(reveal_area==UNKNOWN)
-
-        #Hazard Calc
-        #path = bresenham(robot_pose[0], point[0], robot_pose[1], point[1]) #needs a better method - not guarenteed to be a straight line 
-        hazards = 0
-        if path != -1:
-            for pos in path:
-                if robot_map[pos[0], pos[1]] == HAZARD:
-                    hazards = hazards + 1
-
-        val = dk*d + hk*hazards - ak*area_unknown
-        if val < best:
-            best = val
-            best_pos=point
-            best_path = path
-            best_dist = d
-
-    return best_pos, best_path, best_dist
+    
+    return best_frontier, path, d
+     
 
 def adjust_frontier(pose, map):
     if map[pose[0], pose[1]] == 0:
@@ -220,7 +187,7 @@ def adjust_frontier(pose, map):
 
 def check_euclidian(points, robot_map):
     for point in points:
-        if robot_map[point] == 0:# or (robot_map[point] == UNKNOWN and point != points[-1]):
+        if robot_map[point] == 0 or (robot_map[point] == UNKNOWN and point != points[-1]):
             return False
     return True
 
@@ -270,14 +237,16 @@ def main():
         if len(points) == 0:
             break
 
-        best_frontier, path, dist = evaluate_frontier_points(points, robot_pos[-1], robot_map, Map, search_radius)
-        total_dist = total_dist + dist
+        
+
+        
+        best_frontier, path, dist = eval_frontier(points, robot_pos[-1], robot_map, search_radius)
+        total_dist += dist
 
         for point in robot_pos:
             test_map = cv2.circle(test_map, (point[1], point[0]), 3, [255,0,0], -1)
         for point in path:
-            test_map[point[0], point[1]] = [255,0,0]
-
+             test_map[point[0], point[1]] = [255,0,0]
         cv2.imshow("points", test_map)
         cv2.waitKey(100) 
 
@@ -286,11 +255,9 @@ def main():
         #point = adjust_frontier(point, Map)
         robot_pos.append(best_frontier)
 
-
     et = time.time() - st
 
     print(f"Exploration finished in {et:.2f}s and a total distance of {total_dist:.2f}")
-
 
 if __name__ == "__main__":
     main()
