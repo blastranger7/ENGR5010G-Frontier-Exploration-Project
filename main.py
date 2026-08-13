@@ -93,7 +93,7 @@ def get_frontier_points(robot_map, search_area):
     for f_contour in frontier_contours:
         f_contour = np.squeeze(f_contour)
         con_len = np.shape(f_contour)[0]
-        num_sections = con_len//search_area//2
+        num_sections = con_len//search_area
         if num_sections >= 1:
             sections = np.array_split(f_contour, num_sections)
             for section in sections:
@@ -231,7 +231,7 @@ def main():
     total_dist = 0
     # -- Map Construction --
     Maps = [r"Maps/blank.png", r"Maps/blank_med.png", r"Maps/blank_small.png", r"Maps/hall.png", r"Maps/house.png", r"Maps/house_haz.png", r"Maps/Hall_haz.png"]
-    Map = cv2.imread(Maps[1])
+    Map = cv2.imread(Maps[0])
     Map_display = Map.copy() #Map Copy for display purposes
     Map = cv2.cvtColor(Map, cv2.COLOR_RGB2GRAY) #Map in grayscale for processing
 

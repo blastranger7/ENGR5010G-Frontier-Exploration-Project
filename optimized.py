@@ -198,10 +198,11 @@ def main():
     total_dist = 0
     # -- Map Construction --
     Maps = [r"Maps/blank.png", r"Maps/blank_med.png", r"Maps/blank_small.png", r"Maps/hall.png", r"Maps/house.png", r"Maps/house_haz.png", r"Maps/Hall_haz.png"]
-    Map = cv2.imread(Maps[1])
+    Map = cv2.imread(Maps[3])
     Map_display = Map.copy() #Map Copy for display purposes
     Map = cv2.cvtColor(Map, cv2.COLOR_RGB2GRAY) #Map in grayscale for processing
 
+    print(np.size(Map))
     search_radius = 20
 
     # pad image with zeros to avoid index out of bounds error when searching for frontier points
@@ -228,6 +229,7 @@ def main():
     start_pos = [249, 124]
     #start_pos = [249, 70]
     robot_pos = [start_pos]
+    total_path = []
 
     #robot_map = reveal_grid(robot_map, Map, robot_pos[-1], search_radius)
     while True:
@@ -247,6 +249,7 @@ def main():
             test_map = cv2.circle(test_map, (point[1], point[0]), 3, [255,0,0], -1)
         for point in path:
              test_map[point[0], point[1]] = [255,0,0]
+             total_path.append(point)
         cv2.imshow("points", test_map)
         cv2.waitKey(100) 
 
@@ -258,6 +261,14 @@ def main():
     et = time.time() - st
 
     print(f"Exploration finished in {et:.2f}s and a total distance of {total_dist:.2f}")
+    for point in total_path:
+        Map_display[point[0], point[1]] = [255,0,0]
+    for point in robot_pos:
+        Map_display = cv2.circle(Map_display, (point[1], point[0]), 3, [0,0,255], -1)
+    Map_display = cv2.circle(Map_display, (robot_pos[0][1], robot_pos[0][0]), 3, [255,255,0], -1)
+    Map_display = cv2.circle(Map_display, (robot_pos[-1][1], robot_pos[-1][0]), 3, [0,255,0], -1)
+    cv2.imshow("Full Robot Path", Map_display)
+    cv2.waitKey(0)
 
 if __name__ == "__main__":
     main()
